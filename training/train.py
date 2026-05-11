@@ -90,7 +90,45 @@ def log_audio_samples(experiment, encoder, decoder, rvq, x, step):
         sample_hat[0, 0].cpu().numpy(), sample_rate=16000,
         file_name=f"reconstructed_step{step}.wav"
     )
- 
+
+def save_checkpoint(path, encoder, decoder,  rvq, wave_disc, stft_disc, opt_g, opt_d, step, hf_repo,  hf_token):
+    torch.save({
+        "step":      step,
+        "encoder":   encoder.state_dict(),
+        "decoder":   decoder.state_dict(),
+        "rvq":       rvq.state_dict(),
+        "wave_disc": wave_disc.state_dict(),
+        "stft_disc": stft_disc.state_dict(),
+        "opt_g":     opt_g.state_dict(),
+        "opt_d":     opt_d.state_dict(),
+    }, path)
+    print(f"сохранили чекпоинт: {path}")
+    if hf_repo and hf_token:
+        try:
+            from huggingface_hub import HfApi
+            HfApi().upload_file(
+                path_or_fileobj=path,
+                path_in_repo=f"checkpoints/{Path(path).name}",
+                repo_id=hf_repo,
+                token=hf_token,
+                repo_type="model",
+            )
+            print(f"загрузили на HuggingFace: {hf_repo}")
+        except Exception as e:
+            print(f"не удалось загрузить на HuggingFace: {e}")
+
+def load_checkpoint(path, encoder, decoder, rvq, wave_disc, stft_disc, opt_g, opt_d, device):
+    checkpoint = torch.load(path, map_location=device)
+    encoder.load_state_dict(checkpoint["encoder"])
+    decoder.load_state_dict(checkpoint["decoder"])
+    rvq.load_state_dict(checkpoint["rvq"])
+    wave_disc.load_state_dict(checkpoint["wave_disc"])
+    stft_disc.load_state_dict(checkpoint["stft_disc"])
+    opt_g.load_state_dict(checkpoint["opt_g"])
+    opt_d.load_state_dict(checkpoint["opt_d"])
+    print(f"загрузили чекпоинт с шага {checkpoint['step']}")
+    return checkpoint["step"]
+
 def main(args):
     # Comet
     experiment = None
@@ -125,7 +163,15 @@ def main(args):
         lr=LR, betas=BETAS
     )
 
-    for step in range(TOTAL_STEPS):
+    Path(args.save_dir).mkdir(parents=True, exist_ok=True)
+    start_step = 0
+    if args.resume:
+        start_step = load_checkpoint(
+            args.resume, encoder, decoder, rvq,
+            wave_disc, stft_disc, optimizer_generator, optimizer_discriminator, device
+        )
+
+    for step in range(start_step, TOTAL_STEPS):
         batch = next(data_iter)
         x = batch.to(device) # тензор (B, 1, 8000)
 
@@ -166,6 +212,16 @@ def main(args):
             log_step(experiment, logs, step)
         if step % (LOG_EVERY * 10) == 0:
             log_audio_samples(experiment, encoder, decoder, rvq, x, step)
+        if step % SAVE_EVERY == 0 and step > 0:
+            path = f"{args.save_dir}/checkpoint_step{step}.pth"
+            save_checkpoint(path, encoder, decoder,  rvq, wave_disc, stft_disc, optimizer_generator, optimizer_discriminator, step, hf_repo=args.hf_repo, hf_token=args.hf_token)
+
+    save_checkpoint(
+        f"{args.save_dir}/checkpoint_final.pth",
+        encoder, decoder, rvq, wave_disc, stft_disc,
+        optimizer_generator, optimizer_discriminator,
+        TOTAL_STEPS, hf_repo=args.hf_repo, hf_token=args.hf_token,
+    )
 
 # что должно быть у args
 # data_dir -  путь к данным
@@ -178,4 +234,8 @@ if __name__ == "__main__":
     parser.add_argument("--use_comet",     action="store_true")
     parser.add_argument("--comet_apikey", type=str, default=None)
     parser.add_argument("--comet_project", type=str, default="soundstream")
+    parser.add_argument("--hf_repo",  type=str, default=None)
+    parser.add_argument("--hf_token", type=str, default=None)
+    parser.add_argument("--save_dir", type=str, default="checkpoints")
+    parser.add_argument("--resume",   type=str, default=None)
     main(parser.parse_args())
