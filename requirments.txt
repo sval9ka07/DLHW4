@@ -1,0 +1,11 @@
+torch==2.2.1
+torchaudio==2.2.1
+torchmetrics[audio]==1.4.0
+numpy==1.26.4
+soundfile
+scipy
+tqdm
+matplotlib
+comet_ml
+huggingface_hub
+pystoi
