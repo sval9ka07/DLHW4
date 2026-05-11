@@ -1,6 +1,8 @@
 # заглушка, чтобы обучение не засорять
 import warnings
 warnings.filterwarnings("ignore")
+# раньше чем торч
+from comet_ml import Experiment
 
 import torch
 from torch.utils.data import DataLoader
@@ -47,6 +49,7 @@ BETAS       = (0.5, 0.9)
 # 8 * 10 = 80 бит/фрейм
 # 80 * 80 = 6400 бит / сек - около 6kbps, чисто эмпирически оставляем такие параметры
 # ============================================================================================
+
 C   = 32
 D   = 64 # возможно нужно будет менять, но пока так
 N_Q = 8
@@ -54,8 +57,6 @@ N   = 1024
 
 LOG_EVERY  = 100
 SAVE_EVERY = 5000
-
-
 
 # ============================================================================================
 # В статье используем секцию E. Training objective
@@ -67,7 +68,38 @@ def infinite_dataloader(dataloader):
     while True:
         for batch in dataloader:
             yield batch
+
+def log_step(experiment, logs, step):
+    print(f"step {step} | " + " | ".join(f"{key}: {value:.4f}" for key, value in logs.items()))
+    if experiment is not None:
+        experiment.log_metrics(logs, step=step)
+
+def log_audio_samples(experiment, encoder, decoder, rvq, x, step):
+    if experiment is None:
+        return
+    encoder.eval()
+    decoder.eval()
+    rvq.eval()
+    with torch.no_grad():
+        sample_hat = decoder(rvq(encoder(x[:1]))[1])
+    experiment.log_audio(
+        x[0, 0].cpu().numpy(), sample_rate=16000,
+        file_name=f"original_step{step}.wav"
+    )
+    experiment.log_audio(
+        sample_hat[0, 0].cpu().numpy(), sample_rate=16000,
+        file_name=f"reconstructed_step{step}.wav"
+    )
+ 
 def main(args):
+    # Comet
+    experiment = None
+    if args.use_comet:
+        experiment = Experiment(
+            api_key=args.comet_apikey,
+            project_name=args.comet_project,
+            auto_metric_logging=False,
+        )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"device: {device}")
 
@@ -128,13 +160,22 @@ def main(args):
         d_total_loss.backward()
         optimizer_discriminator.step()
 
-        # Логирование, пока что в консоль
+        # Логирование
         if step % LOG_EVERY == 0:
-            print(f"step {step} | loss_g_total: {logs['loss_g_total']:.4f} | loss_g_adv : {logs['loss_g_adv']:.4f}| loss_g_feat : {logs['loss_g_feat']:.4f} | loss_g_rec: {logs['loss_g_rec']:.4f} | loss_g_commit: {logs['loss_g_commit']:.4f}")
+            logs['loss_d'] = d_total_loss.item()
+            log_step(experiment, logs, step)
+        if step % (LOG_EVERY * 10) == 0:
+            log_audio_samples(experiment, encoder, decoder, rvq, x, step)
 
-# какие item должны быть у args
+# что должно быть у args
 # data_dir -  путь к данным
+# use_comet - используем comet или нет
+# comet_apikey - апиключ комет
+# comet_project - название проекта комет
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_dir", type=str, required=True)
+    parser.add_argument("--use_comet",     action="store_true")
+    parser.add_argument("--comet_apikey", type=str, default=None)
+    parser.add_argument("--comet_project", type=str, default="soundstream")
     main(parser.parse_args())
