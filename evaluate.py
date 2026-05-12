@@ -23,7 +23,8 @@ def compute_stoi(original, reconstructed):
 def compute_nisqa(reconstructed):
     from torchmetrics.audio.nisqa import NonIntrusiveSpeechQualityAssessment
     nisqa = NonIntrusiveSpeechQualityAssessment(fs=SAMPLE_RATE)
-    return nisqa(reconstructed[0]).item()
+    result = nisqa(reconstructed[0])
+    return result[0].item()
 
 def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
