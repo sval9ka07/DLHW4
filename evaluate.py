@@ -1,3 +1,4 @@
+from comet_ml import Experiment
 import torch
 import torchaudio
 import argparse
@@ -27,6 +28,15 @@ def compute_nisqa(reconstructed):
     return result[0].item()
 
 def main(args):
+    # логгируем в Comet
+    experiment = None
+    if args.comet_apikey:
+        experiment = Experiment(
+            api_key=args.comet_apikey,
+            project_name=args.comet_project,
+            auto_metric_logging=False,
+        )
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     encoder, decoder, rvq = load_model_from_checkpoint(args.checkpoint, device)
     files = list(Path(args.test_dir).rglob("*.flac"))[:args.n_files]
@@ -35,7 +45,7 @@ def main(args):
     stoi_scores = []
     nisqa_scores = []
 
-    for path in files:
+    for i, path in enumerate(files):
         waveform = load_audio_from_path(path, device)
         reconstructed = run_trough_codec(waveform, encoder, decoder, rvq)
 
@@ -48,10 +58,28 @@ def main(args):
             print(f"{path.name} | STOI: {stoi_score:.4f} | NISQA: {nisqa_score:.4f}")
         else:
             print(f"{path.name} | STOI: {stoi_score:.4f}")
-        
-    print(f"\nСредний STOI: {sum(stoi_scores)/len(stoi_scores):.4f}")
+
+        if experiment is not None:
+            metrics = {"stoi_per_file": stoi_score}
+            if args.compute_nisqa:
+                metrics["nisqa_per_file"] = nisqa_score
+            experiment.log_metrics(metrics, step=i)
+
+    avg_stoi = sum(stoi_scores) / len(stoi_scores)
+    print(f"\nСредний STOI: {avg_stoi:.4f}")
+
+    avg_nisqa = None
     if nisqa_scores:
-        print(f"Средний NISQA: {sum(nisqa_scores)/len(nisqa_scores):.4f}")
+        avg_nisqa = sum(nisqa_scores) / len(nisqa_scores)
+        print(f"Средний NISQA: {avg_nisqa:.4f}")
+    
+    if experiment is not None:
+        experiment.log_metrics({
+            "test_stoi": avg_stoi,
+            "test_nisqa": avg_nisqa if avg_nisqa else 0,
+            "n_files": len(stoi_scores),
+        })
+        experiment.end()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -59,4 +87,6 @@ if __name__ == "__main__":
     parser.add_argument("--test_dir",      type=str, required=True)
     parser.add_argument("--n_files",       type=int, default=50)
     parser.add_argument("--compute_nisqa", action="store_true")
+    parser.add_argument("--comet_apikey",  type=str, default=None)
+    parser.add_argument("--comet_project", type=str, default="soundstream-eval")
     main(parser.parse_args())
