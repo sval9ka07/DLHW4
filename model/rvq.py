@@ -30,7 +30,15 @@ import torch.nn.functional as F
 # 5. Add commitment loss (MSE between encoder output and its quantized detached version) to avoid encoder outputs drifting from the codebook. 
 # Use 1.0 weight for the loss.
 # ====================================================================================================
-
+# Цитируем статью:
+# The codebook of each quantizer is trained with exponential
+# moving average updates, following the method proposed in
+# VQ-VAE-2 [32]. 
+# Мы не будем это реализовывать.
+# Это из статьи - Enabling bitrate scalability with quantizer dropout - мы тоже не будем реализовывать.
+# Но тут нас поддерживает задание:
+# 3. We only focus on a single bitrate, so do not add bitrate dropout.
+# ====================================================================================================
 class VectorQuantizer(nn.Module):
     def __init__(self, N, D):
         super().__init__()
