@@ -23,6 +23,11 @@ def load_model_from_checkpoint(checkpoint_path, device):
     rvq.eval()
     return encoder, decoder, rvq
 
+# ==============================================================================================
+# Цитируем задание:
+# 4. Train on audio crops, evaluate on full audio.
+# ==============================================================================================
+# Будем использовать эту функцию и в evaluate
 def load_audio_from_path(path, device):
     waveform, sr = torchaudio.load(path)
     # на всякий случай, если герцовка другая
