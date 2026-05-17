@@ -64,7 +64,7 @@ def load_from_parquet(url, parquet_path, indices, text_column, audio_column="aud
         audio_bytes = data["audio"][i]["bytes"]
         waveform, sr = torchaudio.load(io.BytesIO(audio_bytes))
 
-        # опять обработка на всякий случай
+        # уже правда надо
         if sr != SAMPLE_RATE:
             waveform = torchaudio.functional.resample(waveform, sr, SAMPLE_RATE)
         if waveform.shape[0] > 1:
