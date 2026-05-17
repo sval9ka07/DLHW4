@@ -44,6 +44,9 @@ def load_model():
 # а тут нам только кусочек датасета нужен
 
 def load_from_parquet(url, parquet_path, indices, text_column, audio_column="audio"):
+    parent = os.path.dirname(parquet_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     if not os.path.exists(parquet_path):
         print(f"скачиваем часть датасета {parquet_path}")
         response = requests.get(url)
