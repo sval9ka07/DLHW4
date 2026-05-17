@@ -61,7 +61,7 @@ def load_from_parquet(url, parquet_path, indices, text_column, audio_column="aud
 
     samples = []
     for i in indices:
-        audio_bytes = data["audio"][i]["bytes"]
+        audio_bytes = data[audio_column][i]["bytes"]
         waveform, sr = torchaudio.load(io.BytesIO(audio_bytes))
 
         # уже правда надо
