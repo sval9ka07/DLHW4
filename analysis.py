@@ -121,16 +121,15 @@ def plot_comparison(original, reconstructed, title):
 
     plt.tight_layout()
     plt.show()
+    return fig
 
 def get_in_domain_images(samples, encoder, decoder, rvq, device):
+    results = []
     for i, sample in enumerate(samples):
         waveform = sample["waveform"].unsqueeze(0).to(device)
         reconstructed = run_trough_codec(waveform, encoder, decoder, rvq)
 
-        print(f"\n Пример {i+1}")
-        print(f"В аудио звучит текст: {sample['text'][:80]}...")
-
-        plot_comparison(
+        fig = plot_comparison(
             waveform, reconstructed,
             title=f"Пример {i+1}: {sample['text'][:40]}..."
         )
@@ -139,3 +138,11 @@ def get_in_domain_images(samples, encoder, decoder, rvq, device):
         display(Audio(waveform[0, 0].cpu().numpy(), rate=SAMPLE_RATE))
         print("После кодека:")
         display(Audio(reconstructed[0, 0].cpu().numpy(), rate=SAMPLE_RATE))
+
+        results.append({
+            "original": waveform[0, 0].cpu().numpy(),
+            "reconstructed": reconstructed[0, 0].cpu().numpy(),
+            "text": sample["text"],
+            "figure": fig,
+        })
+    return results
