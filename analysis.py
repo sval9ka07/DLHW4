@@ -17,8 +17,8 @@ N_FILES = 7
 # чтобы не скачивать огромный датасет в Google Colab
 # наверное, разрешено было делать в Kaggle
 # но мне показалось, что обязатель все ipynb в Colab
-PARQUET_URL = "https://huggingface.co/datasets/openslr/librispeech_asr/resolve/main/all/test.clean/0000.parquet"
-
+TEST_CLEAN_URL = "https://huggingface.co/datasets/openslr/librispeech_asr/resolve/main/all/test.clean/0000.parquet"
+DISFLUENCY_URL = "https://huggingface.co/datasets/nyrahealth/disfluency_speech_english/resolve/main/data/test-00000-of-00001.parquet"
 # для анализа в test-clean я подумала, что будет неплохо взять более чисто звучащих дикторов
 # иначе нет какой-то явной репрезентативности с последующим сраванением с зашумленными датасетами
 # проверялось просто руками, то есть выводила с интервалом, в начале достаточно шумный диктор
@@ -43,13 +43,10 @@ def load_model():
 # но для этого нужно скачать весь датасет или его подпапку, а это очень много
 # а тут нам только кусочек датасета нужен
 
-def load_test_clean():
-    os.makedirs("asr_test", exist_ok=True)
-    parquet_path = "asr_test/test_clean.parquet"
-
+def load_from_parquet(url, parquet_path, indices, text_column, audio_column="audio"):
     if not os.path.exists(parquet_path):
-        print("скачиваем часть датасета test_clean")
-        response = requests.get(PARQUET_URL)
+        print(f"скачиваем часть датасета {parquet_path}")
+        response = requests.get(url)
         with open(parquet_path, "wb") as f:
             f.write(response.content)
         print("скачали")
@@ -60,7 +57,7 @@ def load_test_clean():
     data = table.to_pydict()
 
     samples = []
-    for i in GOOD_INDICES:
+    for i in indices:
         audio_bytes = data["audio"][i]["bytes"]
         waveform, sr = torchaudio.load(io.BytesIO(audio_bytes))
 
@@ -71,14 +68,30 @@ def load_test_clean():
             waveform = waveform.mean(dim=0, keepdim=True)
         samples.append({
             "waveform": waveform,
-            "text": data["text"][i],
+            "text": data[text_column][i],
         })
 
-        print(f"индекс {i}: {data['text'][i][:60]} и т.д.")
+        print(f"индекс {i}: {data[text_column][i][:60]} и т.д.")
 
-    print(f"загружено {len(samples)} примеров из LibriSpeech test-clean")
+    print(f"загружено {len(samples)} примеров")
     return samples
 
+# обертки
+def load_test_clean():
+    return load_from_parquet(
+        url=TEST_CLEAN_URL,
+        parquet_path="asr_test/test_clean.parquet",
+        indices=GOOD_INDICES,
+        text_column="text",
+    )
+
+def load_external_english():
+    return load_from_parquet(
+        url=DISFLUENCY_URL,
+        parquet_path="disfluency.parquet",
+        indices=list(range(N_FILES)),
+        text_column="verbatim_transcript",
+    )
 
 def plot_comparison(original, reconstructed, title):
     orig_np = original[0, 0].cpu().numpy()
@@ -123,7 +136,7 @@ def plot_comparison(original, reconstructed, title):
     plt.show()
     return fig
 
-def get_in_domain_images(samples, encoder, decoder, rvq, device):
+def get_comparison_images(samples, encoder, decoder, rvq, device):
     results = []
     for i, sample in enumerate(samples):
         waveform = sample["waveform"].unsqueeze(0).to(device)
