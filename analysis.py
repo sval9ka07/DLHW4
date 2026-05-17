@@ -24,6 +24,11 @@ DISFLUENCY_URL = "https://huggingface.co/datasets/nyrahealth/disfluency_speech_e
 # проверялось просто руками, то есть выводила с интервалом, в начале достаточно шумный диктор
 GOOD_INDICES = [200, 233, 266, 300, 333, 366, 400]
 
+RUSSIAN_URL = "https://huggingface.co/datasets/Aniemore/resd_annotated/resolve/main/data/test-00000-of-00001-a2b788d59856c4ae.parquet"
+# разномастные примеры - есть чёткая речь, запинки, разное качество записи, выбраны в ручную 
+# из тех аудио, что имеет 16Гц (хотя для нас это необязательно, просто так удобнее сразу слышать "оригинал")
+
+RUSSIAN_INDICES = [40, 57, 64, 85, 122, 209, 235, 239, 248]
 
 # обертка над load_model_from_checkpoint для notebook
 def load_model():
@@ -94,6 +99,15 @@ def load_external_english():
         parquet_path="disfluency.parquet",
         indices=list(range(N_FILES)),
         text_column="verbatim_transcript",
+    )
+
+def load_russian():
+    return load_from_parquet(
+        url=RUSSIAN_URL,
+        parquet_path="russian.parquet",
+        indices=RUSSIAN_INDICES,
+        text_column="text",
+        audio_column="speech",
     )
 
 def plot_comparison(original, reconstructed, title):
