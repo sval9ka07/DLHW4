@@ -78,3 +78,64 @@ def load_test_clean():
 
     print(f"загружено {len(samples)} примеров из LibriSpeech test-clean")
     return samples
+
+
+def plot_comparison(original, reconstructed, title):
+    orig_np = original[0, 0].cpu().numpy()
+    recon_np = reconstructed[0, 0].cpu().numpy()
+    min_len = min(len(orig_np), len(recon_np))
+    orig_np = orig_np[:min_len]
+    recon_np = recon_np[:min_len]
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 8))
+    fig.suptitle(title, fontsize=13)
+
+    t = np.arange(len(orig_np)) / SAMPLE_RATE
+    axes[0, 0].plot(t, orig_np, linewidth=0.5)
+    axes[0, 0].set_title("Waveform — оригинал")
+    axes[0, 0].set_xlabel("время (с)")
+    axes[0, 0].set_ylabel("амплитуда")
+
+    axes[0, 1].plot(t, recon_np, linewidth=0.5, color="orange")
+    axes[0, 1].set_title("Waveform — после кодека")
+    axes[0, 1].set_xlabel("время (с)")
+    axes[0, 1].set_ylabel("амплитуда")
+
+    mel_transform = torchaudio.transforms.MelSpectrogram(
+        sample_rate=SAMPLE_RATE, n_fft=1024, hop_length=256, n_mels=80
+    )
+    to_db = torchaudio.transforms.AmplitudeToDB()
+
+    orig_mel = to_db(mel_transform(torch.tensor(orig_np).unsqueeze(0)))
+    recon_mel = to_db(mel_transform(torch.tensor(recon_np).unsqueeze(0)))
+
+    axes[1, 0].imshow(orig_mel[0].numpy(), aspect="auto", origin="lower")
+    axes[1, 0].set_title("Mel спектрограмма — оригинал")
+    axes[1, 0].set_xlabel("фреймы")
+    axes[1, 0].set_ylabel("mel bins")
+
+    axes[1, 1].imshow(recon_mel[0].numpy(), aspect="auto", origin="lower")
+    axes[1, 1].set_title("Mel спектрограмма — после кодека")
+    axes[1, 1].set_xlabel("фреймы")
+    axes[1, 1].set_ylabel("mel bins")
+
+    plt.tight_layout()
+    plt.show()
+
+def get_in_domain_images(samples, encoder, decoder, rvq, device):
+    for i, sample in enumerate(samples):
+        waveform = sample["waveform"].unsqueeze(0).to(device)
+        reconstructed = run_trough_codec(waveform, encoder, decoder, rvq)
+
+        print(f"\n Пример {i+1}")
+        print(f"В аудио звучит текст: {sample['text'][:80]}...")
+
+        plot_comparison(
+            waveform, reconstructed,
+            title=f"Пример {i+1}: {sample['text'][:40]}..."
+        )
+
+        print("Оригинал:")
+        display(Audio(waveform[0, 0].cpu().numpy(), rate=SAMPLE_RATE))
+        print("После кодека:")
+        display(Audio(reconstructed[0, 0].cpu().numpy(), rate=SAMPLE_RATE))
